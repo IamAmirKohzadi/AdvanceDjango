@@ -1,111 +1,115 @@
 # AdvanceDjango
 
-Backend practice project built with Django + DRF, focused on production-style fundamentals:
+Backend practice project built with Django + DRF.
 
-- Custom user model (email-based auth)
-- JWT authentication (SimpleJWT)
-- DRF global defaults (auth, permissions, filtering, pagination)
-- OpenAPI docs (drf-spectacular)
+Current scope:
+- Custom user model (`accounts.User`) with email login
+- JWT auth with SimpleJWT
+- Tasks CRUD module
+- Filtering, search, ordering, and pagination
+- Write throttling on task write actions
+- OpenAPI docs with drf-spectacular
 
-## Tech Stack
+## Stack
 
 - Python
 - Django
 - Django REST Framework
-- SimpleJWT
-- drf-spectacular
+- djangorestframework-simplejwt
 - django-filter
+- drf-spectacular
 - django-cors-headers
-- SQLite (current local DB)
-
-## Project Structure
-
-```text
-.
-├── accounts/
-│   ├── admin.py
-│   ├── models.py
-│   ├── serializers.py
-│   ├── urls.py
-│   └── views.py
-├── core/
-│   ├── settings.py
-│   ├── urls.py
-│   ├── asgi.py
-│   └── wsgi.py
-├── manage.py
-└── requirements.txt
-```
+- SQLite (local development)
 
 ## Setup
-
-### 1) Create and activate virtual environment
-
-Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-### 2) Install dependencies
-
-```powershell
 python -m pip install -r requirements.txt
 ```
-
-### 3) Create `.env`
 
 Create `.env` in project root:
 
 ```env
-DJANGO_SECRET_KEY=replace-with-a-real-secret
+DJANGO_SECRET_KEY=replace-with-a-long-random-secret
 DJANGO_DEBUG=1
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
 ```
 
-### 4) Run migrations
+Run project:
 
 ```powershell
 python manage.py makemigrations
 python manage.py migrate
-```
-
-### 5) Create superuser and run server
-
-```powershell
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-## Authentication
+## API Docs
 
-This project uses JWT for API auth.
+- Swagger UI: `GET /api/docs`
+- ReDoc: `GET /api/redoc`
+- OpenAPI schema: `GET /api/schema`
 
-Flow:
+## Auth Flow
 
-1. Register user at `POST /api/auth/register/`
-2. Obtain tokens at `POST /api/token`
-3. Use access token in `Authorization` header:
-   `Bearer <access_token>`
-4. Call protected endpoint `GET /api/auth/me/`
+1. Register: `POST /api/auth/register/`
+2. Get tokens: `POST /api/token`
+3. Refresh token: `POST /api/token/refresh`
+4. Use access token in header:
+`Authorization: Bearer <access_token>`
+5. Current user: `GET /api/auth/me/`
 
-## API Endpoints
+## Task Endpoints
 
-- `POST /api/auth/register/` - register new user
-- `GET /api/auth/me/` - current authenticated user
-- `POST /api/token` - obtain JWT access/refresh tokens
-- `POST /api/token/refresh` - refresh access token
-- `GET /api/schema` - OpenAPI schema
-- `GET /api/docs` - Swagger UI
-- `GET /api/redoc` - ReDoc UI
+Base path: `/api/tasks/`
+
+- `GET /api/tasks/` list current user's tasks
+- `POST /api/tasks/` create task
+- `GET /api/tasks/{id}/` retrieve task
+- `PATCH /api/tasks/{id}/` partial update
+- `PUT /api/tasks/{id}/` full update
+- `DELETE /api/tasks/{id}/` delete task
+
+Query features:
+- Filter: `?status=todo|in_progress|done`
+- Search: `?search=<text>` on `title`, `description`
+- Ordering: `?ordering=created_date|due_date|updated_date`
+- Desc ordering: `?ordering=-created_date`
+- Pagination: page-number pagination enabled globally (`PAGE_SIZE=10`)
+
+## Permissions and Throttling
+
+- Task API permission: authenticated users can write, unauthenticated users are read-only.
+- Task object rule: owner can modify; staff/superuser can modify
+- Task write throttling scope: `task_write`
+- Current write rate: `20/hour` for `create`, `update`, `partial_update`, `destroy`
+
+## Testing
+
+Run task tests:
+
+```powershell
+python manage.py test tasks
+```
+
+Current `tasks` test suite covers:
+- auth-required create
+- authenticated create
+- user-scoped list
+- owner update allowed
+- non-owner update blocked
+- owner delete allowed
+- non-owner delete blocked
+- status filtering
+- search by title and description
+- ordering by `created_date` asc/desc
+- write throttling for create and update paths
 
 ## Admin
 
 - Admin URL: `/admin/`
-- Custom user model: `accounts.User`
-
-## Notes
-
-- Global DRF defaults are configured in `core/settings.py`.
-- Default API permission is authenticated-only (`IsAuthenticated`), with explicit exceptions per view (e.g. register).
+- Registered models:
+- `accounts.User`
+- `tasks.Task`

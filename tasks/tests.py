@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -41,7 +41,7 @@ class TaskAPITests(APITestCase):
         res = self.client.post(self.list_url,{
             'title':'t',
             'description':'a',
-            'status':'Task.Status.TODO'
+            'status':Task.Status.TODO
         },format='json')
         self.assertEqual(res.status_code,status.HTTP_401_UNAUTHORIZED)
 
@@ -59,8 +59,125 @@ class TaskAPITests(APITestCase):
         self.assertIn('Write docs',titles)
         self.assertNotIn('this is a book!',titles)
 
+    def test_owner_can_update(self):
+        self.auth(self.user1)
+        details_url = reverse('task-detail',args=[self.task1.id])
+        res = self.client.patch(details_url,{'title' : 'test update!'},format='json')
+        self.assertEqual(res.status_code,status.HTTP_200_OK)
+    
     def test_non_owner_cannot_update(self):
         self.auth(self.user2)
         details_url = reverse('task-detail',args=[self.task1.id])
         res = self.client.patch(details_url,{'title' : 'updated post!'},format='json')
         self.assertEqual(res.status_code,status.HTTP_404_NOT_FOUND)
+
+    def test_owner_delete_task(self):
+        self.auth(self.user1)
+        detail_url = reverse('task-detail',args=[self.task1.id])
+
+        res = self.client.delete(detail_url)
+        self.assertEqual(res.status_code,status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Task.objects.filter(id=self.task1.id).exists())
+
+    def test_non_owner_cannot_delete_task(self):
+        self.auth(self.user1)
+        detail_url = reverse('task-detail',args=[self.task2.id])
+
+        res = self.client.delete(detail_url)
+        self.assertEqual(res.status_code,status.HTTP_404_NOT_FOUND)
+        self.assertTrue(Task.objects.filter(id=self.task2.id).exists())
+
+    def test_list_filter_by_status(self):
+        self.auth(self.user1)
+        res = self.client.get(self.list_url,{'status':Task.Status.TODO})
+        self.assertEqual(res.status_code,status.HTTP_200_OK)
+        results =res.data['results']
+        self.assertTrue(len(results) >= 1)
+        self.assertTrue(all(item["status"] == Task.Status.TODO for item in results))
+
+    def test_list_filter_by_search_title(self):
+        self.auth(self.user1)
+        res = self.client.get(self.list_url,{'search':'Write'})
+        self.assertEqual(res.status_code,status.HTTP_200_OK)
+        results =res.data['results']
+        self.assertTrue(len(results) >= 1)
+        self.assertTrue(any(item["title"] == 'Write docs' for item in results))
+
+    def test_list_filter_by_search_description(self):
+        self.auth(self.user1)
+        res = self.client.get(self.list_url,{'search':'README'})
+        self.assertEqual(res.status_code,status.HTTP_200_OK)
+        results =res.data['results']
+        self.assertTrue(len(results) >= 1)
+        self.assertTrue(any('README' in item['description'] for item in results))
+
+    def test_ordering_created_date_asc(self):
+        self.auth(self.user1)
+        Task.objects.create(
+            owner=self.user1,
+            title="Write docs2",
+            description="README work2",
+            status=Task.Status.TODO,
+            due_date=timezone.now() + timedelta(days=2),
+        )
+        res = self.client.get(self.list_url,{'ordering':'created_date'})
+        self.assertEqual(res.status_code,status.HTTP_200_OK)
+        dates = [item['created_date'] for item in res.data['results']]
+        self.assertEqual(dates, sorted(dates))
+
+    def test_ordering_created_date_desc(self):
+        self.auth(self.user2)
+        Task.objects.create(
+            owner=self.user2,
+            title="this is a book2!",
+            description="the book is awesome2",
+            status=Task.Status.TODO,
+            due_date=timezone.now() + timedelta(days=2),
+        )
+        res = self.client.get(self.list_url,{'ordering':'-created_date'})
+        self.assertEqual(res.status_code,status.HTTP_200_OK)
+        dates = [item['created_date'] for item in res.data['results']]
+        self.assertEqual(dates, sorted(dates , reverse=True))
+
+    def test_throttle_create(self):
+        cache.clear()
+        userThrottleCreate = User.objects.create_user(email='u3@test.com', password='Mam54321')
+        self.auth(userThrottleCreate)
+
+        for i in range(20):
+            res = self.client.post(self.list_url,
+            {
+                'title' : f'task{i}',
+                'description' : f'description number {i}',
+                'status' : Task.Status.TODO,
+            },
+            format='json')
+            self.assertEqual(res.status_code,status.HTTP_201_CREATED)
+        res = self.client.post(self.list_url,{
+            'title':'throttle limit',
+            'description':'limit hit!',
+            'status':Task.Status.TODO
+        },format='json')
+        self.assertEqual(res.status_code,status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_throttle_update(self):
+        cache.clear()
+        userThrottleUpdate = User.objects.create_user(email='u4@test.com', password='Mam54321')
+        self.auth(userThrottleUpdate)
+        task = Task.objects.create(    
+            owner=userThrottleUpdate,
+            title="task task 1",
+            description="description number 1",
+            status=Task.Status.TODO,)
+        self.assertTrue(Task.objects.filter(id=task.id).exists())
+        details_url = reverse('task-detail',args=[task.id])
+        for i in range(20):
+            res = self.client.patch(details_url,{'title' : f'updated post{i}!'},format='json')
+            self.assertEqual(res.status_code,status.HTTP_200_OK)
+        res2 = self.client.patch(details_url,{'title' : 'throttle hit!'},format='json')
+        self.assertEqual(res2.status_code,status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+
+
+
