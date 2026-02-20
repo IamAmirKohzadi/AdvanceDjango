@@ -18,9 +18,10 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Task.objects.none()
+        base_qs = Task.objects.select_related('owner').order_by('-created_date')
         if user.is_staff or user.is_superuser:
-            return Task.objects.all().order_by('-created_date')
-        return Task.objects.filter(owner=user).order_by('-created_date')
+            return base_qs
+        return base_qs.filter(owner=user)
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 

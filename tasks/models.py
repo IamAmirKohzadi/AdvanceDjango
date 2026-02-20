@@ -19,6 +19,13 @@ class Task(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['status'],name='task_status_idx'),
+            models.Index(fields=['created_date'],name='task_created_idx'),
+            models.Index(fields=['owner','-created_date'],name='task_owner_created_idx')
+        ]
+
 
     def __str__(self):
         # Return the title for admin and display usage.

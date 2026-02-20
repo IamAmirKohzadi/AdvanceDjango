@@ -8,6 +8,8 @@ Current scope:
 - Tasks CRUD module
 - Filtering, search, ordering, and pagination
 - Write throttling on task write actions
+- PostgreSQL local database
+- Query optimization with `select_related("owner")` and DB indexes
 - OpenAPI docs with drf-spectacular
 
 ## Stack
@@ -19,7 +21,7 @@ Current scope:
 - django-filter
 - drf-spectacular
 - django-cors-headers
-- SQLite (local development)
+- PostgreSQL (local development)
 
 ## Setup
 
@@ -86,6 +88,19 @@ Query features:
 - Task write throttling scope: `task_write`
 - Current write rate: `20/hour` for `create`, `update`, `partial_update`, `destroy`
 
+## Database and Performance
+
+- Database engine: PostgreSQL via `psycopg`
+- Added indexes:
+- `task_status_idx` on `status`
+- `task_created_idx` on `created_date`
+- `task_owner_created_idx` on `owner, -created_date`
+- Serializer includes `owner_email` from related user model
+- Queryset optimization uses `select_related("owner")`
+- Query count improvement on task list endpoint:
+- before optimization (with related owner email): `13`
+- after optimization: `3`
+
 ## Testing
 
 Run task tests:
@@ -106,6 +121,7 @@ Current `tasks` test suite covers:
 - search by title and description
 - ordering by `created_date` asc/desc
 - write throttling for create and update paths
+- query count baseline and optimized query count assertions
 
 ## Admin
 
