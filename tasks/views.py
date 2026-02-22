@@ -4,6 +4,7 @@ from .models import Task
 from .serializers import TaskSerializer
 from .throttles import TaskWriteRateThrottle
 from .permissions import IsOwnerOrReadOnly
+from django.db.models import Count, Max, OuterRef, Subquery
 
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -18,7 +19,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Task.objects.none()
-        base_qs = Task.objects.select_related('owner').order_by('-created_date')
+        base_qs = Task.objects.select_related('owner').prefetch_related('comments','comments__author').order_by('-created_date')
         if user.is_staff or user.is_superuser:
             return base_qs
         return base_qs.filter(owner=user)

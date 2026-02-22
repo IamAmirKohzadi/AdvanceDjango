@@ -7,7 +7,7 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework import status
 from rest_framework.test import APITestCase
-from tasks.models import Task
+from tasks.models import Task,TaskComment
 
 User = get_user_model()
 
@@ -78,11 +78,11 @@ class TaskAPITests(APITestCase):
         with CaptureQueriesContext(connection) as ctx:
             res = self.client.get(self.list_url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(ctx.captured_queries), 3)
+        self.assertEqual(len(ctx.captured_queries), 4)
 
     def test_task_list_query_count_baseline(self):
         self.auth(self.user1)
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             res = self.client.get(self.list_url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
 
@@ -100,7 +100,7 @@ class TaskAPITests(APITestCase):
         with CaptureQueriesContext(connection) as ctx:
             res = self.client.get(self.list_url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(ctx.captured_queries), 3)
+        self.assertEqual(len(ctx.captured_queries), 4)
 
     def test_owner_can_update(self):
         self.auth(self.user1)
@@ -235,3 +235,25 @@ class TaskAPITests(APITestCase):
         )
         self.assertEqual(res2.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    def test_task_list_query_count_with_comments(self):
+        cache.clear()
+        self.auth(self.user1)
+        for i in range(10):
+            Task.objects.create(
+            owner=self.user1,
+            title=f"Write docs{i}",
+            description=f"README work{i}",
+            status=Task.Status.TODO,
+            due_date=timezone.now() + timedelta(days=i),
+        )
+        created_tasks = Task.objects.filter(owner=self.user1).order_by('-id')[:10]
+        comments = []
+        for index,t in enumerate(created_tasks):
+            comments.append(TaskComment(task=t,author=self.user1,body=f'content number{index}'))
+            comments.append(TaskComment(task=t,author=self.user1,body=f'content number{index + 1}'))
+        TaskComment.objects.bulk_create(comments)
+        with CaptureQueriesContext(connection) as ctx:
+            res = self.client.get(self.list_url)
+        
+        self.assertEqual(res.status_code,status.HTTP_200_OK)
+        self.assertEqual(len(ctx.captured_queries),5)

@@ -30,3 +30,15 @@ class Task(models.Model):
     def __str__(self):
         # Return the title for admin and display usage.
         return self.title
+    
+class TaskComment(models.Model):
+    task = models.ForeignKey(Task,on_delete=models.CASCADE,related_name='comments')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,related_name='task_comment')
+    body = models.TextField()
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_date']
+
+    def __str__(self):
+        return f'Comment #{self.id} on task #{self.task.id}'
