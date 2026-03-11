@@ -1,4 +1,5 @@
 from django.db import connection
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
@@ -8,6 +9,8 @@ from datetime import timedelta
 from rest_framework import status
 from rest_framework.test import APITestCase
 from tasks.models import Task,TaskComment
+from tasks.services import create_task_with_first_comment
+from unittest.mock import patch
 
 User = get_user_model()
 
@@ -257,3 +260,95 @@ class TaskAPITests(APITestCase):
         
         self.assertEqual(res.status_code,status.HTTP_200_OK)
         self.assertEqual(len(ctx.captured_queries),5)
+
+    def test_stats_require_auth(self):
+        url = reverse('task-stats')
+        res = self.client.get(url)
+        self.assertEqual(res.status_code,status.HTTP_401_UNAUTHORIZED)
+
+    def test_stats_for_normal_user_is_owner_scoped(self):
+        Task.objects.create(
+            owner=self.user1,
+            title="u1 in progress overdue",
+            status=Task.Status.IN_PROGRESS,
+            due_date=timezone.now() - timedelta(days=1),
+        )
+        Task.objects.create(
+            owner=self.user1,
+            title="u1 done overdue",
+            status=Task.Status.DONE,
+            due_date=timezone.now() - timedelta(days=2),
+        )
+        Task.objects.create(
+            owner=self.user2,
+            title="u2 todo overdue",
+            status=Task.Status.TODO,
+            due_date=timezone.now() + timedelta(days=1),
+        )
+        self.auth(self.user1)
+        url = reverse("task-stats")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["total tasks"], 3)  # self.task1 + 2 new for user1
+        self.assertEqual(res.data["by_status"].get(Task.Status.TODO), 1)
+        self.assertEqual(res.data["by_status"].get(Task.Status.IN_PROGRESS), 1)
+        self.assertEqual(res.data["by_status"].get(Task.Status.DONE), 1)
+        self.assertEqual(res.data["over_due"], 1)
+
+    def test_stats_for_staff_user_sees_all_tasks(self):
+        staff = User.objects.create_user(email="staff@test.com", password="Mam54321")
+        staff.is_staff = True
+        staff.save(update_fields=["is_staff"])
+        
+        
+        Task.objects.create(
+            owner=self.user1,
+            title="u1 task",
+            status=Task.Status.TODO,
+        )
+        Task.objects.create(
+            owner=self.user2,
+            title="u2 task",
+            status=Task.Status.IN_PROGRESS,
+        )
+
+        self.auth(staff)
+        url = reverse("task-stats")
+        res = self.client.get(url)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["total tasks"], Task.objects.count())
+
+class TaskServiceTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='service@test.com',
+            password='Mam54321'
+        )
+
+    def test_create_task_with_first_comment_success(self):
+        task = create_task_with_first_comment(
+            owner=self.user,
+            title="Service task",
+            description="Created from service",
+            status=Task.Status.TODO,
+            comment_body="First comment",
+        )
+        self.assertEqual(Task.objects.count(),1)
+        self.assertEqual(TaskComment.objects.count(),1)
+
+        self.assertEqual(task.owner , self.user)
+        self.assertEqual(task.title,"Service task")
+        self.assertTrue(TaskComment.objects.filter(task=task,body='First comment').exists())
+
+    @patch("tasks.services.TaskComment.objects.create", side_effect=Exception("boom"))
+    def test_create_task_with_comment_rolls_back(self, _):
+        with self.assertRaises(Exception):
+            create_task_with_first_comment(
+                owner=self.user,
+                title="Atomic test",
+                comment_body="first",
+            )
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertEqual(TaskComment.objects.count(), 0)
+        

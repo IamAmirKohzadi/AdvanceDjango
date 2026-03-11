@@ -1,8 +1,9 @@
 asgiref==3.11.1
 attrs==25.4.0
 colorama==0.4.6
-Django==6.0.2
+Django==5.2
 django-cors-headers==4.9.0
+django-extensions==4.1
 django-filter==25.2
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
@@ -13,6 +14,8 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 packaging==26.0
 pluggy==1.6.0
+psycopg==3.3.3
+psycopg-binary==3.3.3
 Pygments==2.19.2
 PyJWT==2.11.0
 pytest==9.0.2

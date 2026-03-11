@@ -8,8 +8,9 @@ Current scope:
 - Tasks CRUD module
 - Filtering, search, ordering, and pagination
 - Write throttling on task write actions
-- PostgreSQL local database
+- PostgreSQL database (local and Docker)
 - Query optimization with `select_related("owner")` and DB indexes
+- Prefetch optimization for task comments
 - OpenAPI docs with drf-spectacular
 
 ## Stack
@@ -21,9 +22,9 @@ Current scope:
 - django-filter
 - drf-spectacular
 - django-cors-headers
-- PostgreSQL (local development)
+- PostgreSQL (local and Docker)
 
-## Setup
+## Local Setup
 
 ```powershell
 python -m venv .venv
@@ -37,6 +38,14 @@ Create `.env` in project root:
 DJANGO_SECRET_KEY=replace-with-a-long-random-secret
 DJANGO_DEBUG=1
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
+DJANGO_CSRF_TRUSTED_ORIGINS=http://127.0.0.1:8000,http://localhost:8000
+DJANGO_CORS_ALLOWED_ORIGINS=
+
+POSTGRES_DB=advancedjango
+POSTGRES_USER=advancedjango_user
+POSTGRES_PASSWORD=replace-this
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
 ```
 
 Run project:
@@ -46,6 +55,44 @@ python manage.py makemigrations
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
+```
+
+## Docker Setup
+
+Requires Docker Desktop.
+
+Create `.env.docker` in project root (or copy `.env.example`):
+
+```env
+DJANGO_SECRET_KEY=replace-with-a-long-random-secret
+DJANGO_DEBUG=1
+DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
+DJANGO_CSRF_TRUSTED_ORIGINS=http://127.0.0.1:8000,http://localhost:8000
+DJANGO_CORS_ALLOWED_ORIGINS=
+
+POSTGRES_DB=advancedjango
+POSTGRES_USER=advancedjango_user
+POSTGRES_PASSWORD=replace-this
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+```
+
+Build and run:
+
+```powershell
+docker compose up --build
+```
+
+Create superuser:
+
+```powershell
+docker compose exec backend python manage.py createsuperuser
+```
+
+Run tests:
+
+```powershell
+docker compose exec backend python manage.py test tasks
 ```
 
 ## API Docs
@@ -73,6 +120,7 @@ Base path: `/api/tasks/`
 - `PATCH /api/tasks/{id}/` partial update
 - `PUT /api/tasks/{id}/` full update
 - `DELETE /api/tasks/{id}/` delete task
+- `GET /api/tasks/stats/` task stats for current user (staff sees all)
 
 Query features:
 - Filter: `?status=todo|in_progress|done`
@@ -97,6 +145,7 @@ Query features:
 - `task_owner_created_idx` on `owner, -created_date`
 - Serializer includes `owner_email` from related user model
 - Queryset optimization uses `select_related("owner")`
+- Comments are prefetched with `prefetch_related("comments", "comments__author")`
 - Query count improvement on task list endpoint:
 - before optimization (with related owner email): `13`
 - after optimization: `3`
@@ -122,6 +171,8 @@ Current `tasks` test suite covers:
 - ordering by `created_date` asc/desc
 - write throttling for create and update paths
 - query count baseline and optimized query count assertions
+- stats endpoint (owner scoped and staff global)
+- service-level atomic create/rollback
 
 ## Admin
 

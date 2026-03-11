@@ -159,7 +159,7 @@ REST_FRAMEWORK = {
         "task_write": "20/hour",
     },
 }
-
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SPECTACULAR_SETTINGS = {
     "TITLE": "SaaS API",
     "DESCRIPTION": "Backend API documentation",

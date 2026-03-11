@@ -1,9 +1,12 @@
 from rest_framework import viewsets, permissions, filters
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Task
 from .serializers import TaskSerializer
 from .throttles import TaskWriteRateThrottle
 from .permissions import IsOwnerOrReadOnly
+from .services import get_task_stats_for_user
 from django.db.models import Count, Max, OuterRef, Subquery
 
 
@@ -30,6 +33,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         if self.action in ['create','update','partial_update','destroy']:
             return[TaskWriteRateThrottle()]
         return[]
+    @action(detail=False,methods=['get'],permission_classes=[permissions.IsAuthenticated])
+    def stats(self,request):
+        return Response(get_task_stats_for_user(request.user))
 
 
 
